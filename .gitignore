@@ -3,8 +3,8 @@
 /app/logs/*
 !app/cache/.gitkeep
 !app/logs/.gitkeep
-/app/.env
-/app/vendor/*
+/user-microservice/app/.env
+/user-microservice/app/vendor/*
 
 # Email spool folder
 /app/spool/*
