@@ -1,42 +1,28 @@
 FROM php:8.3-fpm
 
 RUN set -eux; \
-    apt-get update; \
-    apt-get upgrade -y; \
-    apt-get install -y --no-install-recommends \
-            curl \
-            libmemcached-dev \
-            libz-dev \
-            libpq-dev \
-            libjpeg-dev \
-            libpng-dev \
-            libfreetype6-dev \
-            libssl-dev \
-            libwebp-dev \
-            libxpm-dev \
-            libmcrypt-dev \
-            libonig-dev \
-            git; \
-    rm -rf /var/lib/apt/lists/*
+    apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        unzip \
+        libpq-dev \
+        librabbitmq-dev \
+        librdkafka-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
-    docker-php-ext-install pdo_pgsql; \
-    docker-php-ext-configure gd \
-            --prefix=/usr \
-            --with-jpeg \
-            --with-webp \
-            --with-xpm \
-            --with-freetype; \
-    docker-php-ext-install gd; \
-    php -r 'var_dump(gd_info());'
+    docker-php-ext-install \
+        pdo_pgsql \
+        opcache \
+    && pecl install amqp rdkafka \
+    && docker-php-ext-enable amqp rdkafka
 
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/symfony
 
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+EXPOSE 9000
 
-RUN curl -sS https://get.symfony.com/cli/installer | bash
-RUN mv /root/.symfony5/bin/symfony /usr/local/bin/symfony
-
-
+CMD ["php-fpm"]

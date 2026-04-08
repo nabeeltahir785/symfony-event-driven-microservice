@@ -1,0 +1,32 @@
+monolog:
+    channels:
+        - notification
+        - analytics
+        - kafka
+
+    handlers:
+        main:
+            type: stream
+            path: "%kernel.logs_dir%/%kernel.environment%.log"
+            level: debug
+            channels: ["!event"]
+
+        console:
+            type: console
+            process_psr_3_messages: false
+            channels: ["!event", "!doctrine"]
+
+when@prod:
+    monolog:
+        handlers:
+            main:
+                type: stream
+                path: "php://stderr"
+                level: error
+                formatter: monolog.formatter.json
+
+            nested:
+                type: stream
+                path: "php://stderr"
+                level: info
+                formatter: monolog.formatter.json
