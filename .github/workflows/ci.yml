@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  test:
+    name: PHPUnit + Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: amqp, rdkafka, pcntl, pdo_pgsql
+          tools: composer:v2
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: user-microservice/app/vendor
+          key: composer-${{ hashFiles('user-microservice/app/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        working-directory: user-microservice/app
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: PHPStan
+        working-directory: user-microservice/app
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress
+
+      - name: PHP CS Fixer
+        working-directory: user-microservice/app
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: PHPUnit (Unit Tests)
+        working-directory: user-microservice/app
+        env:
+          APP_ENV: test
+          DATABASE_URL: "sqlite:///:memory:"
+          MESSENGER_TRANSPORT_DSN: "doctrine://default"
+          KAFKA_BROKERS: "localhost:9092"
+          KAFKA_TOPIC: "test.events"
+          KAFKA_CONSUMER_GROUP: "test-group"
+          JWT_SECRET_KEY: "%kernel.project_dir%/config/jwt/private.pem"
+          JWT_PUBLIC_KEY: "%kernel.project_dir%/config/jwt/public.pem"
+          JWT_PASSPHRASE: "test-passphrase"
+        run: php bin/phpunit --testsuite=Unit --colors=always

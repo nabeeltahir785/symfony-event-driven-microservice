@@ -5,31 +5,15 @@ declare(strict_types=1);
 namespace App\Repository;
 
 use App\Entity\AnalyticsEvent;
-use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
-/**
- * @extends ServiceEntityRepository<AnalyticsEvent>
- */
-class AnalyticsEventRepository extends ServiceEntityRepository
+class AnalyticsEventRepository extends AbstractDoctrineRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, AnalyticsEvent::class);
     }
 
-    public function save(AnalyticsEvent $event, bool $flush = true): void
-    {
-        $this->getEntityManager()->persist($event);
-
-        if ($flush) {
-            $this->getEntityManager()->flush();
-        }
-    }
-
-    /**
-     * @return AnalyticsEvent[]
-     */
     public function findByAggregateId(string $aggregateId): array
     {
         return $this->findBy(
@@ -38,9 +22,6 @@ class AnalyticsEventRepository extends ServiceEntityRepository
         );
     }
 
-    /**
-     * @return AnalyticsEvent[]
-     */
     public function findByEventType(string $eventType, int $limit = 50): array
     {
         return $this->createQueryBuilder('e')

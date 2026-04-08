@@ -4,21 +4,20 @@ declare(strict_types=1);
 
 namespace App\Message;
 
-class UserEventMessage
-{
-    public const TYPE_CREATED = 'user.created';
-    public const TYPE_UPDATED = 'user.updated';
-    public const TYPE_DELETED = 'user.deleted';
+use App\Contract\MessageInterface;
+use App\Enum\UserEventType;
 
+class UserEventMessage implements MessageInterface
+{
     public function __construct(
-        private readonly string $eventType,
+        private readonly UserEventType $eventType,
         private readonly string $userId,
         private readonly array $payload,
         private readonly string $occurredAt,
     ) {
     }
 
-    public function getEventType(): string
+    public function getEventType(): UserEventType
     {
         return $this->eventType;
     }
@@ -41,7 +40,7 @@ class UserEventMessage
     public function toArray(): array
     {
         return [
-            'eventType' => $this->eventType,
+            'eventType' => $this->eventType->value,
             'userId' => $this->userId,
             'payload' => $this->payload,
             'occurredAt' => $this->occurredAt,

@@ -9,6 +9,8 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 class UpdateUserDTO
 {
+    use RequestParseTrait;
+
     public function __construct(
         #[Assert\Email(message: 'Please provide a valid email address.')]
         public readonly ?string $email = null,
@@ -33,7 +35,7 @@ class UpdateUserDTO
 
     public static function fromRequest(Request $request): self
     {
-        $data = json_decode($request->getContent(), true) ?? [];
+        $data = self::parseJsonBody($request);
 
         return new self(
             email: $data['email'] ?? null,

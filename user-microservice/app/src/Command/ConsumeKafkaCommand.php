@@ -20,6 +20,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class ConsumeKafkaCommand extends Command
 {
+    private bool $shouldStop = false;
+
     public function __construct(
         private readonly string $kafkaBrokers,
         private readonly string $kafkaTopic,
@@ -45,6 +47,8 @@ class ConsumeKafkaCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
         $timeout = (int) $input->getOption('timeout');
+
+        $this->registerSignalHandlers($io);
 
         $io->title('Kafka Analytics Consumer');
         $io->info(sprintf(
@@ -74,7 +78,9 @@ class ConsumeKafkaCommand extends Command
 
         $eventsProcessed = 0;
 
-        while (true) {
+        while (!$this->shouldStop) {
+            pcntl_signal_dispatch();
+
             $message = $consumer->consume($timeout);
 
             switch ($message->err) {
@@ -103,7 +109,35 @@ class ConsumeKafkaCommand extends Command
             }
         }
 
+        $this->logger->info('Kafka consumer shutting down gracefully', [
+            'eventsProcessed' => $eventsProcessed,
+        ]);
+        $io->info(sprintf('Graceful shutdown complete. %d events processed.', $eventsProcessed));
+
         return Command::SUCCESS;
+    }
+
+    private function registerSignalHandlers(SymfonyStyle $io): void
+    {
+        if (!extension_loaded('pcntl')) {
+            $io->warning('pcntl extension not loaded — graceful shutdown unavailable.');
+            return;
+        }
+
+        $handler = function (int $signal) use ($io): void {
+            $signalName = match ($signal) {
+                SIGTERM => 'SIGTERM',
+                SIGINT => 'SIGINT',
+                default => "signal($signal)",
+            };
+
+            $io->note(sprintf('Received %s — initiating graceful shutdown...', $signalName));
+            $this->logger->info('Shutdown signal received', ['signal' => $signalName]);
+            $this->shouldStop = true;
+        };
+
+        pcntl_signal(SIGTERM, $handler);
+        pcntl_signal(SIGINT, $handler);
     }
 
     private function createConsumer(): \RdKafka\KafkaConsumer

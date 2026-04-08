@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Contract\EventPublisherInterface;
 use Psr\Log\LoggerInterface;
 
-class KafkaProducerService
+class KafkaProducerService implements EventPublisherInterface
 {
     private ?\RdKafka\Producer $producer = null;
 
@@ -17,7 +18,7 @@ class KafkaProducerService
     ) {
     }
 
-    public function produce(string $key, array $payload): void
+    public function publish(string $key, array $payload): void
     {
         try {
             $producer = $this->getProducer();

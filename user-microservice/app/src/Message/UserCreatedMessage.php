@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Message;
 
-class UserCreatedMessage
+use App\Contract\MessageInterface;
+
+class UserCreatedMessage implements MessageInterface
 {
     public function __construct(
         private readonly string $userId,
@@ -38,5 +40,16 @@ class UserCreatedMessage
     public function getOccurredAt(): string
     {
         return $this->occurredAt;
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'userId' => $this->userId,
+            'email' => $this->email,
+            'firstName' => $this->firstName,
+            'lastName' => $this->lastName,
+            'occurredAt' => $this->occurredAt,
+        ];
     }
 }

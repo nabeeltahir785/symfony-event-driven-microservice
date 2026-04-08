@@ -1,0 +1,17 @@
+includes:
+
+parameters:
+    level: 8
+    paths:
+        - src
+    excludePaths:
+        - src/Kernel.php
+    ignoreErrors:
+        - '#Call to an undefined method#'
+        - '#Class RdKafka#'
+        - '#Constant RD_KAFKA_#'
+        - '#Function rd_kafka_err2str#'
+        - '#Function pcntl_signal#'
+        - '#Function pcntl_signal_dispatch#'
+        - '#Constant SIGTERM#'
+        - '#Constant SIGINT#'

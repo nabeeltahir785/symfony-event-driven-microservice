@@ -15,6 +15,12 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
+    App\Contract\EventPublisherInterface:
+        alias: App\Service\KafkaProducerService
+
+    App\Contract\UserServiceInterface:
+        alias: App\Service\UserService
+
     App\Service\KafkaProducerService:
         arguments:
             $brokers: '%kafka_brokers%'
@@ -25,3 +31,23 @@ services:
             $kafkaBrokers: '%kafka_brokers%'
             $kafkaTopic: '%kafka_topic%'
             $kafkaConsumerGroup: '%kafka_consumer_group%'
+
+    App\HealthCheck\RabbitMQHealthCheck:
+        arguments:
+            $transportDsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+
+    App\HealthCheck\KafkaHealthCheck:
+        arguments:
+            $brokers: '%kafka_brokers%'
+
+    _instanceof:
+        App\Contract\HealthCheckInterface:
+            tags: ['app.health_check']
+
+    App\Controller\HealthController:
+        arguments:
+            $healthChecks: !tagged_iterator app.health_check
+
+    App\Monolog\CorrelationIdProcessor:
+        tags:
+            - { name: monolog.processor }

@@ -9,6 +9,8 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 class CreateUserDTO
 {
+    use RequestParseTrait;
+
     public function __construct(
         #[Assert\NotBlank(message: 'Email is required.')]
         #[Assert\Email(message: 'Please provide a valid email address.')]
@@ -36,7 +38,7 @@ class CreateUserDTO
 
     public static function fromRequest(Request $request): self
     {
-        $data = json_decode($request->getContent(), true) ?? [];
+        $data = self::parseJsonBody($request);
 
         return new self(
             email: $data['email'] ?? '',

@@ -1,6 +1,8 @@
 # Event-Driven Microservices Platform
 
-> A production-grade Symfony 7 microservices architecture demonstrating asynchronous event processing with **RabbitMQ** (task queues) and **Apache Kafka** (event streaming), backed by **PostgreSQL** and fully orchestrated with **Docker Compose**.
+[![CI](https://github.com/nabeeltahir785/symfony-event-driven-microservice/actions/workflows/ci.yml/badge.svg)](https://github.com/nabeeltahir785/symfony-event-driven-microservice/actions/workflows/ci.yml)
+
+> A production-grade Symfony 7 microservices architecture demonstrating asynchronous event processing with **RabbitMQ** (task queues) and **Apache Kafka** (event streaming), secured with **JWT authentication**, backed by **PostgreSQL**, and fully orchestrated with **Docker Compose**.
 
 ---
 
@@ -13,7 +15,7 @@
  ┌──────────┐   POST /api/users    │  ┌───────────┐   ┌───────────┐  │
  │  Client   │ ──────────────────► │  │   Nginx   │──►│  PHP-FPM  │  │
  │  (cURL)   │ ◄────────────────── │  │  :80      │   │  User API │  │
- └──────────┘   JSON Response      │  └───────────┘   └─────┬─────┘  │
+ └──────────┘   JSON + JWT         │  └───────────┘   └─────┬─────┘  │
                                     │                        │        │
                                     │          ┌─────────────┼────────┤
                                     │          │             │        │
@@ -37,12 +39,13 @@
 
 ### Event Flow
 
-1. **Client** sends `POST /api/users` with user data
-2. **User Service** validates input, persists user to PostgreSQL
-3. **User Service** dispatches `UserCreatedMessage` → **RabbitMQ** (via Symfony Messenger)
-4. **User Service** publishes `UserEventMessage` → **Kafka** (via php-rdkafka)
-5. **Notification Worker** consumes from RabbitMQ, simulates email dispatch
-6. **Analytics Worker** consumes from Kafka, persists event to `analytics_events` table
+1. **Client** authenticates via `POST /api/auth/login` to obtain a JWT token
+2. **Client** sends `POST /api/users` with `Authorization: Bearer <token>`
+3. **User Service** validates input, persists user to PostgreSQL
+4. **User Service** dispatches `UserCreatedMessage` → **RabbitMQ** (via Symfony Messenger)
+5. **User Service** publishes `UserEventMessage` → **Kafka** (via php-rdkafka)
+6. **Notification Worker** consumes from RabbitMQ, simulates email dispatch
+7. **Analytics Worker** consumes from Kafka, persists event to `analytics_events` table
 
 ### Why Dual Brokers?
 
@@ -65,9 +68,14 @@
 | Database | PostgreSQL | 16 |
 | Message Broker | RabbitMQ | 3.13 |
 | Event Streaming | Apache Kafka | 3.7 (KRaft) |
-| ORM | Doctrine | 3.x |
+| Authentication | JWT (Lexik) | 2.x |
+| ORM | Doctrine + Migrations | 3.x |
 | Task Queue | Symfony Messenger | 7.0 |
 | Kafka Client | php-rdkafka | PECL |
+| API Docs | NelmioApiDoc (Swagger) | 4.x |
+| Static Analysis | PHPStan (Level 8) | 1.x |
+| Code Style | PHP CS Fixer (PSR-12) | 3.x |
+| CI/CD | GitHub Actions | — |
 | Containerization | Docker + Compose | Latest |
 
 ---
@@ -85,25 +93,61 @@ make fresh
 ```
 
 This will:
-1. Build all Docker images (PHP with rdkafka + amqp extensions)
+1. Build all Docker images (PHP with rdkafka + amqp + pcntl extensions)
 2. Start PostgreSQL, RabbitMQ, Kafka, Nginx, and both workers
 3. Install Composer dependencies
-4. Create the database and apply schema
+4. Run Doctrine migrations
+5. Generate JWT keypair
 
-### Seed Sample Data
+---
+
+## Authentication
+
+### Register an API User
 
 ```bash
-make seed
+curl -X POST http://localhost/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"secret123"}'
+```
+
+### Login (Get JWT Token)
+
+```bash
+curl -X POST http://localhost/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"secret123"}'
+```
+
+**Response:**
+```json
+{
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..."
+}
+```
+
+### Use Token in Requests
+
+```bash
+export TOKEN="eyJ0eXAiOiJKV1Q..."
+
+curl http://localhost/api/users \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
 
 ## API Documentation
 
+### Swagger UI
+
+Interactive API docs are available at: **http://localhost/api/doc**
+
 ### Create User
 ```bash
 curl -X POST http://localhost/api/users \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "email": "john@example.com",
     "firstName": "John",
@@ -128,32 +172,36 @@ curl -X POST http://localhost/api/users \
 
 ### List Users (Paginated)
 ```bash
-curl http://localhost/api/users?page=1&limit=10
+curl http://localhost/api/users?page=1&limit=10 \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Get Single User
 ```bash
-curl http://localhost/api/users/{id}
+curl http://localhost/api/users/{id} \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Update User
 ```bash
 curl -X PUT http://localhost/api/users/{id} \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"firstName": "Jonathan"}'
 ```
 
 ### Delete User
 ```bash
-curl -X DELETE http://localhost/api/users/{id}
+curl -X DELETE http://localhost/api/users/{id} \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-### Health Check
+### Health Check (Public)
 ```bash
 curl http://localhost/api/health
 ```
 
-**Response**:
+**Response:**
 ```json
 {
   "status": "healthy",
@@ -173,6 +221,7 @@ curl http://localhost/api/health
 
 | Service | URL | Credentials |
 |---|---|---|
+| Swagger UI | http://localhost/api/doc | — |
 | RabbitMQ Management | http://localhost:15672 | `rmq_user` / `rmq_secret` |
 | Kafka UI | http://localhost:8080 | — |
 | PgAdmin | http://localhost:5050 | `admin@admin.com` / `admin` |
@@ -183,48 +232,83 @@ curl http://localhost/api/health
 
 ```
 user-microservice/
-├── app/                              # Symfony Application
+├── .github/
+│   └── workflows/
+│       └── ci.yml                        # GitHub Actions: PHPStan + CS Fixer + PHPUnit
+├── app/
 │   ├── config/
 │   │   ├── packages/
-│   │   │   ├── doctrine.yaml         # PostgreSQL + ORM configuration
-│   │   │   ├── messenger.yaml        # RabbitMQ transport + DLQ
-│   │   │   ├── monolog.yaml          # Structured logging
-│   │   │   └── validator.yaml        # Input validation
-│   │   ├── services.yaml             # DI container + Kafka wiring
-│   │   └── routes.yaml               # Attribute-based routing
+│   │   │   ├── doctrine.yaml             # PostgreSQL + ORM + Migrations
+│   │   │   ├── lexik_jwt_authentication.yaml  # JWT keypair config
+│   │   │   ├── messenger.yaml            # RabbitMQ transport + DLQ + retry
+│   │   │   ├── monolog.yaml              # Structured logging + correlation ID
+│   │   │   ├── nelmio_api_doc.yaml       # Swagger/OpenAPI config
+│   │   │   ├── security.yaml             # JWT firewalls + access control
+│   │   │   └── validator.yaml            # Input validation
+│   │   ├── services.yaml                 # DI container + tagged services
+│   │   └── routes.yaml                   # Attribute-based routing
 │   ├── src/
 │   │   ├── Command/
-│   │   │   └── ConsumeKafkaCommand.php    # Kafka consumer (php-rdkafka)
+│   │   │   └── ConsumeKafkaCommand.php       # Kafka consumer (graceful shutdown)
+│   │   ├── Contract/
+│   │   │   ├── EventPublisherInterface.php   # Kafka publisher abstraction
+│   │   │   ├── HealthCheckInterface.php      # Health check contract
+│   │   │   ├── MessageInterface.php          # Message envelope contract
+│   │   │   └── UserServiceInterface.php      # User service abstraction
 │   │   ├── Controller/
-│   │   │   ├── HealthController.php       # Service health endpoint
-│   │   │   └── UserController.php         # RESTful CRUD API
+│   │   │   ├── AuthController.php            # JWT registration
+│   │   │   ├── HealthController.php          # Service health (OpenAPI)
+│   │   │   └── UserController.php            # RESTful CRUD (OpenAPI)
 │   │   ├── DTO/
-│   │   │   ├── CreateUserDTO.php          # Validated creation payload
-│   │   │   ├── UpdateUserDTO.php          # Partial update payload
-│   │   │   └── UserResponseDTO.php        # Response serialization
+│   │   │   ├── CreateUserDTO.php             # Validated creation payload
+│   │   │   ├── RequestParseTrait.php         # DRY JSON parsing
+│   │   │   ├── UpdateUserDTO.php             # Partial update payload
+│   │   │   └── UserResponseDTO.php           # Response serialization
 │   │   ├── Entity/
-│   │   │   ├── AnalyticsEvent.php         # Kafka event store
-│   │   │   └── User.php                   # Core user entity (UUID)
+│   │   │   ├── AnalyticsEvent.php            # Kafka event store
+│   │   │   ├── ApiUser.php                   # JWT auth entity
+│   │   │   └── User.php                      # Core user entity (UUID)
+│   │   ├── Enum/
+│   │   │   └── UserEventType.php             # PHP 8.2 backed enum
+│   │   ├── EventListener/
+│   │   │   └── CorrelationIdListener.php     # X-Request-ID middleware
 │   │   ├── EventSubscriber/
-│   │   │   └── ExceptionSubscriber.php    # Global JSON error handler
+│   │   │   └── ExceptionSubscriber.php       # Global JSON error handler
+│   │   ├── HealthCheck/
+│   │   │   ├── AbstractTcpHealthCheck.php    # DRY socket probe
+│   │   │   ├── DatabaseHealthCheck.php       # PostgreSQL health
+│   │   │   ├── KafkaHealthCheck.php          # Kafka health
+│   │   │   └── RabbitMQHealthCheck.php       # RabbitMQ health
 │   │   ├── Message/
-│   │   │   ├── UserCreatedMessage.php     # RabbitMQ message
-│   │   │   └── UserEventMessage.php       # Kafka event envelope
+│   │   │   ├── UserCreatedMessage.php        # RabbitMQ message
+│   │   │   └── UserEventMessage.php          # Kafka event envelope (enum-typed)
 │   │   ├── MessageHandler/
-│   │   │   └── NotificationHandler.php    # RabbitMQ consumer
+│   │   │   └── NotificationHandler.php       # RabbitMQ consumer
+│   │   ├── Monolog/
+│   │   │   └── CorrelationIdProcessor.php    # Distributed trace injection
 │   │   ├── Repository/
+│   │   │   ├── AbstractDoctrineRepository.php # DRY persistence
 │   │   │   ├── AnalyticsEventRepository.php
+│   │   │   ├── ApiUserRepository.php
 │   │   │   └── UserRepository.php
 │   │   └── Service/
-│   │       ├── KafkaProducerService.php   # Direct rdkafka producer
-│   │       └── UserService.php            # Business orchestrator
-│   └── .env                          # Environment configuration
+│   │       ├── EventDispatcherService.php    # RabbitMQ + Kafka dispatch
+│   │       ├── KafkaProducerService.php      # Direct rdkafka producer
+│   │       ├── UserService.php               # Business orchestrator
+│   │       └── ValidationService.php         # Extracted validator
+│   ├── tests/
+│   │   ├── Unit/                             # 16 test files, 119+ tests
+│   │   └── Integration/                      # 2 test files, 17+ tests
+│   ├── .php-cs-fixer.dist.php                # PSR-12 code style rules
+│   ├── phpstan.neon                          # PHPStan level 8
+│   ├── phpunit.xml.dist                      # PHPUnit configuration
+│   └── .env                                  # Environment configuration
 ├── nginx/
-│   └── default.conf                  # Nginx → PHP-FPM proxy
+│   └── default.conf                          # Nginx → PHP-FPM proxy
 ├── php/
-│   └── Dockerfile                    # PHP 8.3 + rdkafka + amqp
-├── docker-compose.yml                # Full infrastructure
-└── Makefile                          # Developer commands
+│   └── Dockerfile                            # Multi-stage build (PHP 8.3 + extensions)
+├── docker-compose.yml                        # Full infrastructure
+└── Makefile                                  # Developer commands
 ```
 
 ---
@@ -232,20 +316,26 @@ user-microservice/
 ## Make Commands
 
 ```bash
-make help           # Show all available commands
-make up             # Start all containers
-make down           # Stop all containers
-make fresh          # Full reset: rebuild + install + migrate
-make logs           # Tail all service logs
-make logs-workers   # Tail worker logs only
-make shell          # Open shell in PHP container
-make install        # Install Composer dependencies
-make migrate        # Run database schema updates
-make seed           # Seed sample users via API
-make health         # Check service health
-make test           # Run PHPUnit tests
-make consume-rmq    # Start RabbitMQ consumer manually
-make consume-kafka  # Start Kafka consumer manually
+make help              # Show all available commands
+make up                # Start all containers
+make down              # Stop all containers
+make fresh             # Full reset: rebuild + install + migrate + jwt-keys
+make logs              # Tail all service logs
+make logs-workers      # Tail worker logs only
+make shell             # Open shell in PHP container
+make install           # Install Composer dependencies
+make migrate           # Run Doctrine migrations
+make jwt-keys          # Generate JWT keypair
+make test              # Run all PHPUnit tests
+make test-unit         # Run unit tests only
+make test-integration  # Run integration tests only
+make phpstan           # Run PHPStan static analysis (level 8)
+make lint              # Run PHP CS Fixer (dry-run)
+make lint-fix          # Run PHP CS Fixer (auto-fix)
+make seed              # Seed sample users via API
+make health            # Check service health
+make consume-rmq       # Start RabbitMQ consumer manually
+make consume-kafka     # Start Kafka consumer manually
 ```
 
 ---
@@ -259,28 +349,44 @@ RabbitMQ handles **commands** (fire-and-forget tasks with retry/DLQ) while Kafka
 - **RabbitMQ**: Uses Symfony Messenger's AMQP transport — demonstrates framework fluency
 - **Kafka**: Uses `php-rdkafka` extension directly — demonstrates understanding of Kafka's consumer group/offset model which doesn't cleanly map to Messenger's push-based architecture
 
-### 3. Clean Architecture Layers
-```
-Controller → Service → Repository → Entity
-    ↓            ↓
-   DTO      Message/Event
-```
-Controllers handle HTTP concerns only. Services orchestrate business logic and event dispatching. Repositories abstract data access. DTOs decouple API contracts from domain entities.
+### 3. SOLID & DRY Architecture
+- **Single Responsibility**: `UserService`, `ValidationService`, `EventDispatcherService` each own one concern
+- **Open/Closed**: Health checks use tagged iterator — add new checks without modifying `HealthController`
+- **Dependency Inversion**: All services depend on interfaces (`UserServiceInterface`, `EventPublisherInterface`, `HealthCheckInterface`)
+- **DRY**: `AbstractDoctrineRepository`, `AbstractTcpHealthCheck`, `RequestParseTrait` eliminate duplication
 
-### 4. Event-Driven Patterns
-- **Event Sourcing Lite**: Analytics events are stored as an append-only log in PostgreSQL, enabling audit trails and event replay
-- **Dead-Letter Queue**: Failed RabbitMQ messages are routed to a Doctrine-backed `failed` transport for inspection and retry
-- **Idempotent Processing**: UUID-based message keying enables deduplication at the consumer level
+### 4. PHP 8.2+ Modern Features
+- **Backed Enums**: `UserEventType` replaces string constants with type-safe enum cases
+- **Readonly Constructor Promotion**: All services use promoted constructor parameters
+- **Union Types & Intersection Types**: Test mocks use `MockObject&Interface` intersection syntax
 
-### 5. Production Readiness
-- Health check endpoint with database + broker connectivity verification
-- Structured JSON logging (Monolog) with dedicated channels per service
-- Input validation via Symfony Validator with human-readable error responses
-- Global exception handling that converts exceptions to clean JSON API errors
-- Docker health checks with dependency ordering
+### 5. JWT Stateless Authentication
+- Separate `ApiUser` entity from domain `User` — authentication ≠ domain model
+- Stateless JWT with `json_login` authenticator
+- Public endpoints (health, auth, docs) vs protected API routes
 
-### 6. Kafka KRaft Mode
+### 6. Graceful Shutdown with PCNTL Signals
+The Kafka consumer traps `SIGTERM` and `SIGINT` via `pcntl_signal()`, allowing Kubernetes to safely terminate the pod mid-iteration without corrupting event processing.
+
+### 7. Distributed Tracing via Correlation IDs
+Every HTTP request receives an `X-Request-ID` (passed through or auto-generated UUID). The `CorrelationIdProcessor` injects this into every Monolog log record, enabling cross-service trace correlation.
+
+### 8. Dead-Letter Queue & Retry Strategy
+Failed RabbitMQ messages retry 3 times with exponential backoff (1s → 2s → 4s), then route to a Doctrine-backed `failed` transport for manual inspection via `messenger:failed:show`.
+
+### 9. Comprehensive Test Suite
+- **136+ unit tests** covering entities, DTOs, messages, services, health checks, subscribers, and handlers
+- **17+ integration tests** testing the real service pipeline with only infrastructure mocked
+- Tests use PHP 8.2 intersection types for mock type safety
+
+### 10. CI/CD Pipeline
+GitHub Actions runs PHPStan (level 8), PHP CS Fixer (dry-run), and PHPUnit on every push/PR — enforcing code quality gates before merge.
+
+### 11. Kafka KRaft Mode
 Uses Kafka without Zookeeper (KRaft mode) — the modern deployment approach since Kafka 3.3+, reducing infrastructure complexity.
+
+### 12. Docker Multi-Stage Build
+The Dockerfile uses a builder stage for Composer dependency installation and a slim runtime stage — reducing final image size and following container best practices.
 
 ---
 

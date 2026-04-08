@@ -31,7 +31,6 @@ class NotificationHandler
 
     private function sendWelcomeEmail(UserCreatedMessage $message): void
     {
-        // Simulate email dispatch latency
         usleep(200_000);
 
         $this->logger->info('Welcome email dispatched', [

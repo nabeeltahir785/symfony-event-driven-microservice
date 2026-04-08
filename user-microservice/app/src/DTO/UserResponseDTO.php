@@ -42,10 +42,6 @@ class UserResponseDTO
         ];
     }
 
-    /**
-     * @param User[] $users
-     * @return array
-     */
     public static function collectionToArray(array $users): array
     {
         return array_map(
